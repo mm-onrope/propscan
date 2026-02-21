@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PoolFinder — Feature Review Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#070b14;--card:#0f1420;--cyan:#06d6a0;--cdim:rgba(6,214,160,.12);--cbrd:rgba(6,214,160,.25);--blue:#118ab2;--red:#ef4444;--orange:#ef8354;--gold:#ffd166;--t1:#e8ecf4;--t2:#8a94a8;--t3:#5a6478;--bdr:rgba(255,255,255,.06)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t1);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:48px;background:rgba(7,11,20,.95);border-bottom:1px solid var(--bdr);flex-shrink:0;z-index:200}
+.tb-l{display:flex;align-items:center;gap:12px;font-weight:600;font-size:.95rem}
+.tb-l .logo-i{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,var(--cyan),var(--blue));display:flex;align-items:center;justify-content:center;font-size:.8rem}
+.tb-r{display:flex;align-items:center;gap:8px}
+.btn{padding:6px 14px;border-radius:6px;font-size:.8rem;border:none;cursor:pointer;font-family:inherit;font-weight:600;transition:all .15s}
+.btn-g{background:transparent;border:1px solid var(--bdr);color:var(--t2)}.btn-g:hover{border-color:var(--t3);color:var(--t1)}
+.btn-r{background:var(--red);color:#fff}.btn-r:hover{background:#dc2626}
+.btn-r:disabled{opacity:.4;cursor:not-allowed}
+.btn-c{background:var(--cyan);color:var(--bg)}.btn-c:hover{opacity:.9}
+
+.main{display:flex;flex:1;overflow:hidden}
+
+/* Sidebar */
+.sidebar{width:340px;border-right:1px solid var(--bdr);display:flex;flex-direction:column;background:var(--card);flex-shrink:0;overflow:hidden}
+.sb-section{padding:12px 14px;border-bottom:1px solid var(--bdr)}
+.sb-section h3{font-size:.82rem;color:var(--cyan);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.sb-section select,.sb-section input{width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--bdr);border-radius:6px;color:var(--t1);font-family:inherit;font-size:.82rem;outline:none;margin-bottom:6px}
+.sb-section select:focus,.sb-section input:focus{border-color:var(--cbrd)}
+
+.stats-row{display:flex;gap:8px;flex-wrap:wrap}
+.stat-box{flex:1;min-width:70px;text-align:center;padding:8px 4px;background:rgba(255,255,255,.02);border-radius:6px}
+.stat-box .n{font-family:'JetBrains Mono',monospace;font-size:1.1rem;font-weight:700;color:var(--cyan)}
+.stat-box .l{font-size:.65rem;color:var(--t3)}
+
+.mode-btns{display:flex;gap:6px}
+.mode-btn{flex:1;padding:8px;border-radius:6px;font-size:.78rem;border:1px solid var(--bdr);background:transparent;color:var(--t2);cursor:pointer;font-family:inherit;text-align:center;transition:all .15s}
+.mode-btn.active{background:var(--cdim);border-color:var(--cbrd);color:var(--cyan)}
+.mode-btn:hover:not(.active){border-color:var(--t3)}
+
+.feature-list{flex:1;overflow-y:auto;padding:8px}
+.fl-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;margin-bottom:4px;cursor:pointer;transition:background .15s;font-size:.78rem;border:1px solid transparent}
+.fl-item:hover{background:rgba(255,255,255,.03)}
+.fl-item.selected{border-color:var(--red);background:rgba(239,68,68,.08)}
+.fl-item.highlighted{border-color:var(--cyan);background:var(--cdim)}
+.fl-cb{width:16px;height:16px;border-radius:3px;border:2px solid var(--bdr);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;transition:all .15s}
+.fl-item.selected .fl-cb{border-color:var(--red);background:var(--red);color:#fff}
+.fl-info{flex:1;min-width:0}
+.fl-addr{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--t1)}
+.fl-meta{font-size:.7rem;color:var(--t3);font-family:'JetBrains Mono',monospace}
+.fl-conf{font-size:.7rem;font-weight:600;font-family:'JetBrains Mono',monospace;flex-shrink:0}
+
+/* Map */
+.map-wrap{flex:1;position:relative}
+#map{width:100%;height:100%}
+.leaflet-container{background:var(--bg)}
+
+/* Selection rectangle */
+.select-rect{position:absolute;border:2px dashed var(--red);background:rgba(239,68,68,.1);pointer-events:none;z-index:1000;display:none}
+
+/* Action bar */
+.action-bar{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(7,11,20,.92);backdrop-filter:blur(12px);border:1px solid var(--bdr);border-radius:10px;padding:10px 16px;display:flex;align-items:center;gap:12px;font-size:.85rem;display:none}
+.action-bar.show{display:flex}
+.action-bar .count{font-family:'JetBrains Mono',monospace;color:var(--red);font-weight:700}
+
+/* Toast */
+.toast{position:fixed;top:60px;right:20px;z-index:2000;background:var(--card);border:1px solid var(--cbrd);border-radius:8px;padding:12px 18px;font-size:.85rem;color:var(--cyan);opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+
+@media(max-width:900px){.sidebar{width:100%;max-height:40vh;border-right:none;border-bottom:1px solid var(--bdr)}.main{flex-direction:column}}
+</style>
+</head><body>
+
+<div class="topbar">
+<div class="tb-l"><div class="logo-i">🏊</div> Feature Review Tool</div>
+<div class="tb-r">
+<button class="btn btn-g" onclick="selectAll()">Select All Visible</button>
+<button class="btn btn-g" onclick="deselectAll()">Clear Selection</button>
+<button class="btn btn-r" id="deleteBtn" disabled onclick="deleteSelected()">🗑 Delete Selected (0)</button>
+<button class="btn btn-g" onclick="location.href='/admin'">← Admin</button>
+</div>
+</div>
+
+<div class="main">
+<div class="sidebar">
+<div class="sb-section">
+<h3>Load Region</h3>
+<select id="regionSelect" onchange="loadRegion()">
+<option value="">Select scanned region...</option>
+</select>
+<div class="stats-row" id="statsRow">
+<div class="stat-box"><div class="n" id="statTotal">0</div><div class="l">Total</div></div>
+<div class="stat-box"><div class="n" id="statSelected">0</div><div class="l">Selected</div></div>
+<div class="stat-box"><div class="n" id="statRes">0</div><div class="l">Res.</div></div>
+<div class="stat-box"><div class="n" id="statOther">0</div><div class="l">Other</div></div>
+</div>
+</div>
+<div class="sb-section">
+<h3>Selection Mode</h3>
+<div class="mode-btns">
+<button class="mode-btn active" data-mode="click" onclick="setMode('click')">Click to Toggle</button>
+<button class="mode-btn" data-mode="box" onclick="setMode('box')">Box Select</button>
+</div>
+<div style="font-size:.72rem;color:var(--t3);margin-top:6px">
+<strong>Click mode:</strong> Click markers to select/deselect for deletion.<br>
+<strong>Box mode:</strong> Click+drag a rectangle on the map to select all features inside.
+</div>
+</div>
+<div class="sb-section">
+<h3>Filter</h3>
+<select id="filterConf" onchange="applyFilter()">
+<option value="0">All confidence levels</option>
+<option value="50">Below 50% only (likely false positives)</option>
+<option value="60">Below 60%</option>
+<option value="70">Below 70%</option>
+<option value="80">Below 80%</option>
+</select>
+<select id="filterType" onchange="applyFilter()">
+<option value="">All types</option>
+<option value="Residential">Residential</option>
+<option value="Strata">Strata</option>
+<option value="Commercial">Commercial</option>
+</select>
+</div>
+<div class="feature-list" id="featureList"></div>
+</div>
+
+<div class="map-wrap">
+<div id="map"></div>
+<div class="select-rect" id="selectRect"></div>
+<div class="action-bar" id="actionBar">
+<span><span class="count" id="actionCount">0</span> features selected for deletion</span>
+<button class="btn btn-r" onclick="deleteSelected()">🗑 Delete</button>
+<button class="btn btn-g" onclick="deselectAll()">Cancel</button>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = window.location.origin;
+let map, features = [], markers = {}, selected = new Set(), mode = 'click';
+let boxStart = null, isDrawing = false;
+
+// ── Map ──
+map = L.map('map', {zoomControl: false}).setView([-33.8, 151.2], 12);
+L.control.zoom({position: 'bottomright'}).addTo(map);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri', maxZoom: 19
+}).addTo(map);
+
+// ── Load regions ──
+async function init() {
+    const r = await fetch(API + '/admin/data', {credentials: 'include'});
+    if (!r.ok) { location.href = '/admin'; return; }
+    const d = await r.json();
+    const sel = document.getElementById('regionSelect');
+    (d.regions_scanned || []).forEach(rg => {
+        const opt = document.createElement('option');
+        opt.value = JSON.stringify({suburb: rg.suburb, state: rg.state, postcode: rg.postcode || ''});
+        opt.textContent = `${rg.suburb}, ${rg.state} (${rg.count} features)`;
+        sel.appendChild(opt);
+    });
+}
+
+async function loadRegion() {
+    const val = document.getElementById('regionSelect').value;
+    if (!val) return;
+    const rg = JSON.parse(val);
+    const params = new URLSearchParams();
+    if (rg.suburb) params.set('suburb', rg.suburb);
+    if (rg.state) params.set('state', rg.state);
+    if (rg.postcode) params.set('postcode', rg.postcode);
+
+    const r = await fetch(`${API}/admin/features?${params}`, {credentials: 'include'});
+    if (!r.ok) { toast('Failed to load features'); return; }
+    const d = await r.json();
+    features = d.features || [];
+    selected.clear();
+    renderFeatures();
+    if (features.length) {
+        const bounds = L.latLngBounds(features.map(f => [f.lat, f.lng]));
+        map.fitBounds(bounds, {padding: [40, 40]});
+    }
+    toast(`Loaded ${features.length} features`);
+}
+
+function renderFeatures() {
+    // Clear existing markers
+    Object.values(markers).forEach(m => map.removeLayer(m));
+    markers = {};
+
+    const filter = getFilter();
+    const list = document.getElementById('featureList');
+    list.innerHTML = '';
+
+    let shown = 0, res = 0, other = 0;
+
+    features.forEach(f => {
+        if (!matchFilter(f, filter)) return;
+        shown++;
+        if (f.property_type === 'Residential') res++; else other++;
+
+        // Map marker
+        const conf = f.confidence || 0;
+        const color = selected.has(f.id) ? '#ef4444' : conf >= 85 ? '#06d6a0' : conf >= 65 ? '#ffd166' : '#ef8354';
+        const marker = L.circleMarker([f.lat, f.lng], {
+            radius: 7, fillColor: color, color: selected.has(f.id) ? '#ef4444' : '#fff',
+            weight: selected.has(f.id) ? 2.5 : 1, fillOpacity: 0.85
+        }).addTo(map);
+
+        marker.bindPopup(`<div style="font-size:13px">
+            <strong>${f.address || f.id}</strong><br>
+            ${f.length_m || '?'}m × ${f.width_m || '?'}m · ${f.area_m2 || '?'}m²<br>
+            ${f.property_type || '?'} · Conf: ${conf}%<br>
+            <em style="color:#888">${f.id}</em>
+        </div>`);
+
+        marker.on('click', () => {
+            if (mode === 'click') toggleSelect(f.id);
+        });
+        markers[f.id] = marker;
+
+        // Sidebar list item
+        const div = document.createElement('div');
+        div.className = 'fl-item' + (selected.has(f.id) ? ' selected' : '');
+        div.id = 'fl-' + f.id;
+        div.innerHTML = `
+            <div class="fl-cb">${selected.has(f.id) ? '✕' : ''}</div>
+            <div class="fl-info">
+                <div class="fl-addr">${f.address || f.id}</div>
+                <div class="fl-meta">${f.length_m || '?'}m × ${f.width_m || '?'}m · ${f.property_type || '?'}</div>
+            </div>
+            <div class="fl-conf" style="color:${conf >= 85 ? 'var(--cyan)' : conf >= 65 ? 'var(--gold)' : 'var(--orange)'}">${conf}%</div>`;
+        div.addEventListener('click', () => {
+            toggleSelect(f.id);
+            map.setView([f.lat, f.lng], Math.max(map.getZoom(), 17));
+            markers[f.id]?.openPopup();
+        });
+        list.appendChild(div);
+    });
+
+    document.getElementById('statTotal').textContent = shown;
+    document.getElementById('statSelected').textContent = selected.size;
+    document.getElementById('statRes').textContent = res;
+    document.getElementById('statOther').textContent = other;
+    updateActionBar();
+}
+
+function toggleSelect(id) {
+    if (selected.has(id)) selected.delete(id);
+    else selected.add(id);
+    renderFeatures();
+}
+
+function selectAll() {
+    const filter = getFilter();
+    features.forEach(f => { if (matchFilter(f, filter)) selected.add(f.id); });
+    renderFeatures();
+}
+
+function deselectAll() {
+    selected.clear();
+    renderFeatures();
+}
+
+function getFilter() {
+    return {
+        maxConf: parseInt(document.getElementById('filterConf').value) || 0,
+        type: document.getElementById('filterType').value
+    };
+}
+
+function matchFilter(f, filter) {
+    if (filter.maxConf > 0 && (f.confidence || 0) >= filter.maxConf) return false;
+    if (filter.type && f.property_type !== filter.type) return false;
+    return true;
+}
+
+function applyFilter() { renderFeatures(); }
+
+function updateActionBar() {
+    const bar = document.getElementById('actionBar');
+    const btn = document.getElementById('deleteBtn');
+    if (selected.size > 0) {
+        bar.classList.add('show');
+        document.getElementById('actionCount').textContent = selected.size;
+        btn.disabled = false;
+        btn.textContent = `🗑 Delete Selected (${selected.size})`;
+    } else {
+        bar.classList.remove('show');
+        btn.disabled = true;
+        btn.textContent = '🗑 Delete Selected (0)';
+    }
+}
+
+// ── Delete ──
+async function deleteSelected() {
+    if (selected.size === 0) return;
+    if (!confirm(`Delete ${selected.size} features permanently? This cannot be undone.`)) return;
+    const ids = Array.from(selected);
+    try {
+        const r = await fetch(API + '/admin/features/bulk-delete', {
+            method: 'POST', credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ids})
+        });
+        if (!r.ok) { toast('Delete failed'); return; }
+        const d = await r.json();
+        // Remove from local data
+        features = features.filter(f => !selected.has(f.id));
+        selected.clear();
+        renderFeatures();
+        toast(`Deleted ${d.deleted} false positives`);
+    } catch (e) { toast('Error: ' + e.message); }
+}
+
+// ── Box Select ──
+function setMode(m) {
+    mode = m;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+    map.dragging[m === 'box' ? 'disable' : 'enable']();
+}
+
+const mapEl = document.getElementById('map');
+const rectEl = document.getElementById('selectRect');
+let rectStartX, rectStartY;
+
+mapEl.addEventListener('mousedown', e => {
+    if (mode !== 'box') return;
+    isDrawing = true;
+    rectStartX = e.clientX - mapEl.getBoundingClientRect().left;
+    rectStartY = e.clientY - mapEl.getBoundingClientRect().top;
+    rectEl.style.left = rectStartX + 'px';
+    rectEl.style.top = rectStartY + 'px';
+    rectEl.style.width = '0';
+    rectEl.style.height = '0';
+    rectEl.style.display = 'block';
+});
+
+mapEl.addEventListener('mousemove', e => {
+    if (!isDrawing) return;
+    const x = e.clientX - mapEl.getBoundingClientRect().left;
+    const y = e.clientY - mapEl.getBoundingClientRect().top;
+    rectEl.style.left = Math.min(x, rectStartX) + 'px';
+    rectEl.style.top = Math.min(y, rectStartY) + 'px';
+    rectEl.style.width = Math.abs(x - rectStartX) + 'px';
+    rectEl.style.height = Math.abs(y - rectStartY) + 'px';
+});
+
+mapEl.addEventListener('mouseup', e => {
+    if (!isDrawing) return;
+    isDrawing = false;
+    rectEl.style.display = 'none';
+
+    const mapRect = mapEl.getBoundingClientRect();
+    const x1 = Math.min(rectStartX, e.clientX - mapRect.left);
+    const y1 = Math.min(rectStartY, e.clientY - mapRect.top);
+    const x2 = Math.max(rectStartX, e.clientX - mapRect.left);
+    const y2 = Math.max(rectStartY, e.clientY - mapRect.top);
+
+    if (Math.abs(x2 - x1) < 10 || Math.abs(y2 - y1) < 10) return;
+
+    const nw = map.containerPointToLatLng([x1, y1]);
+    const se = map.containerPointToLatLng([x2, y2]);
+    const bounds = L.latLngBounds(nw, se);
+
+    const filter = getFilter();
+    features.forEach(f => {
+        if (!matchFilter(f, filter)) return;
+        if (bounds.contains([f.lat, f.lng])) selected.add(f.id);
+    });
+    renderFeatures();
+});
+
+// ── Toast ──
+function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+init();
+</script>
+</body></html>
